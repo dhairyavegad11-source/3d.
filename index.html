@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Apex Horizon 3D - 100 Supercars & Superbikes</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            background-color: #050508;
+            color: #ffffff;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Glassmorphism Styling */
+        .glass-panel {
+            background: rgba(15, 18, 28, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        /* Speedometer Gradient Dial */
+        .speed-gauge {
+            background: conic-gradient(from 220deg, #3b82f6 0%, #06b6d4 50%, #ef4444 85%, rgba(255,255,255,0.1) 85%);
+        }
+
+        /* Custom Scrollbar for Garage */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.6);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(59, 130, 246, 0.9);
+        }
+
+        /* Minimap canvas styling */
+        #minimap {
+            border: 2px solid rgba(59, 130, 246, 0.5);
+            border-radius: 50%;
+            background: rgba(5, 8, 15, 0.85);
+        }
+
+        .touch-btn {
+            touch-action: manipulation;
+        }
+    </style>
+</head>
+<body class="relative">
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- HUD Overlay -->
+    <div id="hud" class="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- Top Navigation / Stats Bar -->
+        <div class="flex justify-between items-start pointer-events-auto">
+            <div class="flex items-center space-x-3">
+                <button id="btn-garage" class="glass-panel hover:bg-blue-600/30 text-white font-bold py-2 px-4 rounded-xl transition duration-200 flex items-center gap-2 border border-blue-500/30 shadow-lg">
+                    <i class="fa-solid fa-garage text-blue-400"></i>
+                    <span class="hidden sm:inline">GARAGE (M)</span>
+                </button>
+                <button id="btn-camera" class="glass-panel hover:bg-blue-600/30 text-white font-bold p-2.5 rounded-xl transition duration-200 border border-blue-500/30">
+                    <i class="fa-solid fa-camera text-cyan-400"></i>
+                </button>
+                <button id="btn-settings" class="glass-panel hover:bg-blue-600/30 text-white font-bold p-2.5 rounded-xl transition duration-200 border border-blue-500/30">
+                    <i class="fa-solid fa-sliders text-gray-300"></i>
+                </button>
+            </div>
+
+            <!-- Current Vehicle Info -->
+            <div class="glass-panel py-2 px-5 rounded-2xl border border-white/10 text-right">
+                <div id="hud-vehicle-name" class="font-extrabold text-lg md:text-xl text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Bugatti Chiron SuperSport</div>
+                <div id="hud-vehicle-class" class="text-xs uppercase tracking-widest text-gray-400 font-semibold">Hypercar Class</div>
+            </div>
+
+            <!-- Radar / Minimap -->
+            <div class="relative">
+                <canvas id="minimap" width="130" height="130"></canvas>
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div class="w-2.5 h-2.5 bg-cyan-400 rounded-full border-2 border-white shadow-[0_0_8px_#06b6d4]"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Banner -->
+        <div id="notification-box" class="self-center glass-panel px-6 py-2 rounded-full border border-cyan-500/40 text-cyan-300 font-semibold text-sm opacity-0 transition-opacity duration-300 translate-y-2 transform">
+            Welcome to Apex Horizon Open World!
+        </div>
+
+        <!-- Bottom Speedometer & Controls Section -->
+        <div class="flex justify-between items-end">
+            <!-- Controls Info (Desktop) -->
+            <div class="hidden lg:flex flex-col gap-1 text-xs text-gray-400 glass-panel p-3 rounded-xl border border-white/10">
+                <div><span class="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono">W / ↑</span> Accelerate</div>
+                <div><span class="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono">S / ↓</span> Brake / Reverse</div>
+                <div><span class="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono">A / D</span> Steering</div>
+                <div><span class="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono">SPACE</span> Handbrake / Drift</div>
+                <div><span class="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono">SHIFT</span> Nitro Boost</div>
+                <div><span class="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono">C</span> Toggle Camera</div>
+            </div>
+
+            <!-- Speed Gauge Center/Right -->
+            <div class="flex items-center gap-4">
+                <!-- Nitro Bar -->
+                <div class="flex flex-col items-center gap-1">
+                    <div class="text-xs text-cyan-400 font-bold uppercase tracking-wider">NOS</div>
+                    <div class="w-4 h-32 bg-gray-900/80 rounded-full border border-white/10 p-0.5 flex flex-col justify-end overflow-hidden">
+                        <div id="nitro-fill" class="w-full bg-gradient-to-t from-cyan-500 to-blue-400 rounded-full transition-all duration-75" style="height: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- Speed Dial -->
+                <div class="relative w-36 h-36 md:w-44 md:h-44 flex items-center justify-center">
+                    <div class="absolute inset-0 rounded-full speed-gauge opacity-30 blur-sm"></div>
+                    <div class="w-full h-full glass-panel rounded-full border-2 border-white/20 flex flex-col items-center justify-center relative overflow-hidden shadow-2xl">
+                        <!-- Gear Indicator -->
+                        <div id="hud-gear" class="text-blue-400 text-sm font-black uppercase tracking-widest">GEAR 1</div>
+                        <!-- Speed Display -->
+                        <div id="hud-speed" class="text-4xl md:text-5xl font-black text-white tracking-tighter my-0.5">0</div>
+                        <div class="text-xs font-bold text-gray-400 tracking-widest">KM/H</div>
+                        <!-- RPM Bar -->
+                        <div class="w-20 h-1.5 bg-gray-800 rounded-full mt-2 overflow-hidden border border-white/10">
+                            <div id="rpm-bar" class="h-full bg-gradient-to-r from-blue-500 via-cyan-400 to-red-500 w-0 transition-all"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Touch Controls Layer -->
+    <div id="mobile-controls" class="absolute inset-0 z-20 pointer-events-none flex justify-between items-end p-6 md:hidden">
+        <!-- Steering / D-Pad Left -->
+        <div class="flex gap-3 pointer-events-auto">
+            <button id="touch-left" class="touch-btn w-16 h-16 glass-panel rounded-2xl flex items-center justify-center active:bg-blue-600/50 text-2xl border border-white/20">
+                <i class="fa-solid fa-arrow-left text-white"></i>
+            </button>
+            <button id="touch-right" class="touch-btn w-16 h-16 glass-panel rounded-2xl flex items-center justify-center active:bg-blue-600/50 text-2xl border border-white/20">
+                <i class="fa-solid fa-arrow-right text-white"></i>
+            </button>
+        </div>
+
+        <!-- Pedal Controls Right -->
+        <div class="flex gap-3 items-end pointer-events-auto">
+            <button id="touch-brake" class="touch-btn w-14 h-14 glass-panel rounded-2xl flex items-center justify-center active:bg-red-600/50 text-xl border border-red-500/30">
+                <i class="fa-solid fa-shoe-prints text-red-400"></i>
+            </button>
+            <button id="touch-nitro" class="touch-btn w-12 h-12 glass-panel rounded-xl flex items-center justify-center active:bg-cyan-600/50 text-lg border border-cyan-400/40">
+                <i class="fa-solid fa-bolt text-cyan-300"></i>
+            </button>
+            <button id="touch-gas" class="touch-btn w-16 h-20 glass-panel rounded-2xl flex items-center justify-center active:bg-green-600/50 text-2xl border border-green-500/30">
+                <i class="fa-solid fa-gas-pump text-green-400"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Garage Overlay Modal -->
+    <div id="garage-modal" class="absolute inset-0 z-30 bg-black/90 backdrop-blur-xl flex flex-col p-4 md:p-8 hidden transition-all duration-300">
+        <!-- Modal Header -->
+        <div class="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+            <div>
+                <h1 class="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-white">EXOTIC GARAGE Catalog</h1>
+                <p class="text-xs md:text-sm text-gray-400">Select from 100 High Performance Supercars & Superbikes</p>
+            </div>
+            <button id="close-garage" class="w-10 h-10 glass-panel rounded-xl flex items-center justify-center hover:bg-red-500/30 transition border border-white/20">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+
+        <!-- Filter Categories -->
+        <div class="flex gap-2 md:gap-4 mb-6 overflow-x-auto pb-2">
+            <button class="cat-filter active px-5 py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-lg shadow-blue-600/30" data-cat="all">All Vehicles (100)</button>
+            <button class="cat-filter px-5 py-2.5 rounded-xl font-bold text-sm glass-panel hover:bg-white/10 text-gray-300" data-cat="hypercar">Hypercars (25)</button>
+            <button class="cat-filter px-5 py-2.5 rounded-xl font-bold text-sm glass-panel hover:bg-white/10 text-gray-300" data-cat="exotic">Exotic Sports (25)</button>
+            <button class="cat-filter px-5 py-2.5 rounded-xl font-bold text-sm glass-panel hover:bg-white/10 text-gray-300" data-cat="track-bike">Track Superbikes (25)</button>
+            <button class="cat-filter px-5 py-2.5 rounded-xl font-bold text-sm glass-panel hover:bg-white/10 text-gray-300" data-cat="hypersport-bike">Hypersport Bikes (25)</button>
+        </div>
+
+        <!-- Vehicle Grid -->
+        <div id="vehicle-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto flex-1 pr-2">
+            <!-- Grid Items dynamically inserted here -->
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="absolute inset-0 z-30 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-md p-6 rounded-3xl border border-white/10 space-y-6">
+            <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                <h2 class="text-xl font-extrabold text-white">Graphics & Settings</h2>
+                <button id="close-settings" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-semibold">Shadow Quality</span>
+                    <select id="setting-shadows" class="bg-gray-900 text-sm border border-white/20 rounded-lg px-3 py-1.5">
+                        <option value="high" selected>High (PBR)</option>
+                        <option value="medium">Medium</option>
+                        <option value="off">Disabled</option>
+                    </select>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-semibold">Tire Particle Effects</span>
+                    <input type="checkbox" id="setting-particles" checked class="w-5 h-5 accent-blue-500 rounded">
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-semibold">Time of Day</span>
+                    <select id="setting-tod" class="bg-gray-900 text-sm border border-white/20 rounded-lg px-3 py-1.5">
+                        <option value="day">Daylight</option>
+                        <option value="sunset">Sunset Gold</option>
+                        <option value="night" selected>Cyber Night</option>
+                    </select>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-semibold">Audio Engine FX</span>
+                    <input type="checkbox" id="setting-audio" checked class="w-5 h-5 accent-blue-500 rounded">
+                </div>
+            </div>
+
+            <button id="apply-settings" class="w-full bg-blue-600 hover:bg-blue-500 font-bold py-3 rounded-xl transition text-center shadow-lg shadow-blue-600/30">
+                Apply Settings
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Game Logic JavaScript -->
+    <script>
+        /* ----------------------------------------------------
+           1. 100 SUPERCAR & SUPERBIKE CATALOG DATABASE
+           ---------------------------------------------------- */
+        const CAR_NAMES = [
+            "Bugatti Chiron SS", "Koenigsegg Jesko", "Lamborghini Aventador", "Ferrari LaFerrari", "Porsche 918 Spyder",
+            "McLaren P1", "Pagani Huayra BC", "Aston Martin Valkyrie", "Rimac Nevera", "Hennessy Venom F5",
+            "Bugatti Bolide", "Koenigsegg Gemera", "Lamborghini Sian", "Ferrari SF90 Stradale", "McLaren Senna",
+            "SSC Tuatara", "Lotus Evija", "Maserati MC20", "Ford GT Carbon", "Chevrolet Corvette Z06",
+            "Audi R8 V10 Performance", "Nissan GT-R Nismo", "Porsche 911 GT3 RS", "Mercedes-AMG ONE", "BMW M4 CSL",
+            "Lamborghini Huracan STO", "Ferrari 296 GTB", "McLaren 765LT", "Aston Martin DBS", "Dodge Viper ACR",
+            "Lexus LFA Nurburgring", "Pagani Zonda R", "Bugatti Veyron SS", "Koenigsegg Agera RS", "Saleen S7 Twin Turbo",
+            "Jaguar C-X75", "Noble M600", "Zenvo TSR-S", "Apollo IE", "De Tomaso P72",
+            "Vector W8", "McLaren Speedtail", "Ferrari Daytona SP3", "Lamborghini Countach LPI 800-4", "Bugatti Mistral",
+            "Pininfarina Battista", "Gordon Murray T.50", "BAC Mono R", "KTM X-Bow GTX", "Donkervoort D8 GTO"
+        ];
+
+        const BIKE_NAMES = [
+            "Kawasaki Ninja H2R", "Ducati Panigale V4R", "BMW S1000RR", "Yamaha YZF-R1M", "Suzuki Hayabusa",
+            "MV Agusta F4 RR", "Aprilia RSV4 Factory", "Honda CBR1000RR-R", "KTM 1290 Super Duke", "Ducati Streetfighter V4",
+            "BMW M1000RR", "Kawasaki Ninja ZX-10RR", "Norton V4SV", "Bimota Tesi H2", "Energica Ego+",
+            "Lightning LS-218", "Triumph Daytona Moto2", "MV Agusta Rush 1000", "Ducati Superleggera V4", "Yamaha MT-10 SP",
+            "Suzuki GSX-R1000R", "Aprilia Tuono V4", "KTM RC 8C", "Harley-Davidson LiveWire S2", "Arch KRGT-1",
+            "Kawasaki Z H2 SE", "BMW R 1250 RS", "Honda Gold Wing Tour", "Ducati Diavel 1260 S", "Indian FTR R Carbon",
+            "MV Agusta Dragster RR", "Yamaha YZF-R6", "Kawasaki Ninja 630 R", "Ducati Monster SP", "KTM 890 Duke R",
+            "Triumph Speed Triple 1200", "Aprilia RS 660", "BMW F 900 R", "Husqvarna Vitpilen 701", "Benelli TNT 600",
+            "Mutt Super 6", "CFMoto 800NK", "Zero SR/F", "Damon HyperSport", "Tarform Luna",
+            "Confederate FA-13 Combat", "Vins Duecinquanta", "Vanguard Roadster", "Curtiss One", "Aston Martin AMB 001"
+        ];
+
+        const VEHICLE_DATABASE = [];
+
+        // Helper to generate database items
+        function initVehicleDatabase() {
+            // 50 Supercars
+            for (let i = 0; i < 50; i++) {
+                const isHyper = i < 25;
+                VEHICLE_DATABASE.push({
+                    id: i,
+                    name: CAR_NAMES[i],
+                    type: 'car',
+                    category: isHyper ? 'hypercar' : 'exotic',
+                    topSpeed: Math.floor(320 + Math.random() * 130), // 320 - 450 km/h
+                    accel: (2.0 + Math.random() * 1.5).toFixed(1),  // 2.0s - 3.5s
+                    handling: Math.floor(75 + Math.random() * 24),
+                    weight: Math.floor(1100 + Math.random() * 500),
+                    color: [
+                        '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', 
+                        '#ec4899', '#06b6d4', '#e11d48', '#111827', '#f97316'
+                    ][i % 10]
+                });
+            }
+            // 50 Superbikes
+            for (let i = 0; i < 50; i++) {
+                const isTrack = i < 25;
+                VEHICLE_DATABASE.push({
+                    id: 50 + i,
+                    name: BIKE_NAMES[i],
+                    type: 'bike',
+                    category: isTrack ? 'track-bike' : 'hypersport-bike',
+                    topSpeed: Math.floor(290 + Math.random() * 110), // 290 - 400 km/h
+                    accel: (1.8 + Math.random() * 1.2).toFixed(1),  // 1.8s - 3.0s
+                    handling: Math.floor(82 + Math.random() * 18),
+                    weight: Math.floor(160 + Math.random() * 70),
+                    color: [
+                        '#06b6d4', '#8b5cf6', '#ef4444', '#10b981', '#f59e0b', 
+                        '#e11d48', '#3b82f6', '#ec4899', '#ffffff', '#f97316'
+                    ][i % 10]
+                });
+            }
+        }
+
+        initVehicleDatabase();
+
+        /* ----------------------------------------------------
+           2. GAME SYSTEM STATE & CONSTANTS
+           ---------------------------------------------------- */
+        let scene, camera, renderer;
+        let activeVehicleMesh = null;
+        let currentVehicleData = VEHICLE_DATABASE[0]; // Bugatti Chiron default
+        
+        // Settings
+        const settings = {
+            shadows: 'high',
+            particles: true,
+            tod: 'night',
+            audio: true
+        };
+
+        // Physics State
+        const physics = {
+            speed: 0,
+            rpm: 1000,
+            gear: 1,
+            steeringAngle: 0,
+            bikeLeanAngle: 0,
+            nitro: 100,
+            isNitroActive: false,
+            position: new THREE.Vector3(0, 0, 0),
+            rotation: 0,
+            velocity: new THREE.Vector3(),
+            isDrifting: false
+        };
+
+        // Inputs
+        const keys = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false,
+            handbrake: false,
+            nitro: false
+        };
+
+        // Camera Views
+        let cameraMode = 0; // 0: 3rd person, 1: Cockpit/Hood, 2: Far Rear
+
+        /* ----------------------------------------------------
+           3. AUDIO SYNTHESIZER (WEB AUDIO API)
+           ---------------------------------------------------- */
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.oscillator = null;
+                this.gainNode = null;
+                this.initialized = false;
+            }
+
+            init() {
+                if (this.initialized) return;
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                    
+                    // Engine Synth Oscillator
+                    this.oscillator = this.ctx.createOscillator();
+                    this.gainNode = this.ctx.createGain();
+                    
+                    this.oscillator.type = 'sawtooth';
+                    this.oscillator.frequency.value = 60; // Initial idle frequency
+                    this.gainNode.gain.value = 0.05;
+
+                    this.oscillator.connect(this.gainNode);
+                    this.gainNode.connect(this.ctx.destination);
+                    this.oscillator.start();
+                    this.initialized = true;
+                } catch(e) {
+                    console.log('Web Audio context blocked/unsupported', e);
+                }
+            }
+
+            update(speed, rpm, isNitro) {
+                if (!this.initialized || !settings.audio) return;
+                
+                // Frequency mapped to RPM / Speed
+                const baseFreq = currentVehicleData.type === 'bike' ? 90 : 50;
+                const freq = baseFreq + (rpm / 8000) * 220 + (isNitro ? 50 : 0);
+                this.oscillator.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.05);
+
+                // Volume adjust
+                const vol = Math.min(0.12, 0.02 + (Math.abs(speed) / currentVehicleData.topSpeed) * 0.08);
+                this.gainNode.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.05);
+            }
+        }
+
+        const audioEngine = new SoundEngine();
+
+        /* ----------------------------------------------------
+           4. THREE.JS OPEN WORLD ENVIRONMENT SETUP
+           ---------------------------------------------------- */
+        const citySize = 1200; // City boundary
+        const roads = [];
+        const buildings = [];
+        const lightPoles = [];
+
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x05070f);
+            scene.fog = new THREE.FogExp2(0x05070f, 0.002);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.0;
+            container.appendChild(renderer.domElement);
+
+            // Lighting Setup
+            setupLighting();
+
+            // World Generation
+            buildOpenWorld();
+
+            // Vehicle Construction
+            spawnVehicle(currentVehicleData);
+
+            // Window Resize Listener
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function setupLighting() {
+            // Ambient Light
+            const ambient = new THREE.AmbientLight(0x1e293b, 0.8);
+            scene.add(ambient);
+
+            // Directional Light (Moon / Sun)
+            const dirLight = new THREE.DirectionalLight(0x38bdf8, 1.2);
+            dirLight.position.set(200, 400, 100);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 10;
+            dirLight.shadow.camera.far = 1000;
+            const d = 300;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+        }
+
+        /* ----------------------------------------------------
+           5. PROCEDURAL 3D CITY GENERATOR
+           ---------------------------------------------------- */
+        function buildOpenWorld() {
+            // Main Ground Plane
+            const groundGeo = new THREE.PlaneGeometry(citySize * 2, citySize * 2);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.9 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Grid Layout Road System
+            const roadMat = new THREE.MeshStandardMaterial({ color: 0x111622, roughness: 0.6 });
+            const stripeMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
+            const roadWidth = 24;
+            const gridSize = 150;
+
+            for (let i = -citySize / 2; i <= citySize / 2; i += gridSize) {
+                // North-South Roads
+                const nsRoadGeo = new THREE.PlaneGeometry(roadWidth, citySize * 2);
+                const nsRoad = new THREE.Mesh(nsRoadGeo, roadMat);
+                nsRoad.rotation.x = -Math.PI / 2;
+                nsRoad.position.x = i;
+                nsRoad.position.y = 0.05;
+                nsRoad.receiveShadow = true;
+                scene.add(nsRoad);
+
+                // East-West Roads
+                const ewRoadGeo = new THREE.PlaneGeometry(citySize * 2, roadWidth);
+                const ewRoad = new THREE.Mesh(ewRoadGeo, roadMat);
+                ewRoad.rotation.x = -Math.PI / 2;
+                ewRoad.position.z = i;
+                ewRoad.position.y = 0.05;
+                ewRoad.receiveShadow = true;
+                scene.add(ewRoad);
+            }
+
+            // Skyscrapers & Neon City Buildings
+            const buildingGeo = new THREE.BoxGeometry(1, 1, 1);
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.2, metalness: 0.8 });
+            
+            const neonColors = [0x3b82f6, 0x06b6d4, 0xec4899, 0x8b5cf6, 0x10b981];
+
+            for (let x = -citySize / 2 + 75; x < citySize / 2; x += gridSize) {
+                for (let z = -citySize / 2 + 75; z < citySize / 2; z += gridSize) {
+                    // Create Block of 2-4 Buildings
+                    for (let b = 0; b < 3; b++) {
+                        const bx = x + (Math.random() - 0.5) * 60;
+                        const bz = z + (Math.random() - 0.5) * 60;
+                        const h = 40 + Math.random() * 180;
+                        const w = 25 + Math.random() * 20;
+                        const d = 25 + Math.random() * 20;
+
+                        const bMesh = new THREE.Mesh(buildingGeo, glassMat);
+                        bMesh.position.set(bx, h / 2, bz);
+                        bMesh.scale.set(w, h, d);
+                        bMesh.castShadow = true;
+                        bMesh.receiveShadow = true;
+                        scene.add(bMesh);
+
+                        // Decorative Neon Window Strips
+                        if (Math.random() > 0.3) {
+                            const neonColor = neonColors[Math.floor(Math.random() * neonColors.length)];
+                            const neonMat = new THREE.MeshBasicMaterial({ color: neonColor });
+                            const strip = new THREE.Mesh(buildingGeo, neonMat);
+                            strip.position.set(bx, h * 0.8, bz);
+                            strip.scale.set(w * 1.02, 1.5, d * 1.02);
+                            scene.add(strip);
+                        }
+                    }
+                }
+            }
+
+            // Elevated Highway Stunt Ramps
+            createStuntRamps();
+        }
+
+        function createStuntRamps() {
+            const rampMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, metalness: 0.5, roughness: 0.3 });
+            
+            const rampLocations = [
+                { x: 0, z: -300, rot: 0 },
+                { x: 300, z: 0, rot: Math.PI / 2 },
+                { x: -400, z: 200, rot: Math.PI }
+            ];
+
+            rampLocations.forEach(loc => {
+                const rampGeo = new THREE.BoxGeometry(16, 8, 30);
+                const ramp = new THREE.Mesh(rampGeo, rampMat);
+                ramp.position.set(loc.x, 2, loc.z);
+                ramp.rotation.y = loc.rot;
+                ramp.rotation.x = -Math.PI / 12; // Incline
+                ramp.receiveShadow = true;
+                ramp.castShadow = true;
+                scene.add(ramp);
+            });
+        }
+
+        /* ----------------------------------------------------
+           6. PROCEDURAL VEHICLE MODEL BUILDER
+           ---------------------------------------------------- */
+        function spawnVehicle(data) {
+            if (activeVehicleMesh) scene.remove(activeVehicleMesh);
+
+            const vehicleGroup = new THREE.Group();
+            const bodyColor = new THREE.Color(data.color);
+            const paintMaterial = new THREE.MeshStandardMaterial({
+                color: bodyColor,
+                metalness: 0.85,
+                roughness: 0.15,
+                envMapIntensity: 1.0
+            });
+            const glassMaterial = new THREE.MeshStandardMaterial({
+                color: 0x111111,
+                metalness: 0.9,
+                roughness: 0.05,
+                transparent: true,
+                opacity: 0.7
+            });
+            const chromeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.95, roughness: 0.1 });
+            const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+
+            if (data.type === 'car') {
+                // ---- CAR MODEL CONSTRUCTION ----
+                // Main Chassis
+                const chassisGeo = new THREE.BoxGeometry(2.2, 0.8, 4.8);
+                const chassis = new THREE.Mesh(chassisGeo, paintMaterial);
+                chassis.position.y = 0.6;
+                chassis.castShadow = true;
+                vehicleGroup.add(chassis);
+
+                // Cockpit Roof
+                const cabinGeo = new THREE.BoxGeometry(1.8, 0.6, 2.2);
+                const cabin = new THREE.Mesh(cabinGeo, glassMaterial);
+                cabin.position.set(0, 1.1, -0.2);
+                cabin.castShadow = true;
+                vehicleGroup.add(cabin);
+
+                // Wheels
+                const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.35, 24);
+                wheelGeo.rotateZ(Math.PI / 2);
+
+                const wheelPositions = [
+                    [-1.05, 0.45, 1.4],  // Front Left
+                    [1.05, 0.45, 1.4],   // Front Right
+                    [-1.05, 0.45, -1.4], // Rear Left
+                    [1.05, 0.45, -1.4]   // Rear Right
+                ];
+
+                vehicleGroup.wheels = [];
+                wheelPositions.forEach(pos => {
+                    const wheel = new THREE.Mesh(wheelGeo, tireMaterial);
+                    wheel.position.set(...pos);
+                    wheel.castShadow = true;
+                    vehicleGroup.add(wheel);
+                    vehicleGroup.wheels.push(wheel);
+                });
+
+                // Headlights & Taillights
+                const headLightMat = new THREE.MeshBasicMaterial({ color: 0xe0f2fe });
+                const tailLightMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+
+                const hl1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.1), headLightMat);
+                hl1.position.set(-0.7, 0.7, 2.41);
+                const hl2 = hl1.clone();
+                hl2.position.x = 0.7;
+                vehicleGroup.add(hl1, hl2);
+
+                const tl = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.1), tailLightMat);
+                tl.position.set(0, 0.75, -2.41);
+                vehicleGroup.add(tl);
+
+            } else {
+                // ---- SUPERBIKE MODEL CONSTRUCTION ----
+                // Frame & Tank
+                const tankGeo = new THREE.BoxGeometry(0.6, 0.6, 1.4);
+                const tank = new THREE.Mesh(tankGeo, paintMaterial);
+                tank.position.y = 0.85;
+                tank.castShadow = true;
+                vehicleGroup.add(tank);
+
+                const engineGeo = new THREE.BoxGeometry(0.5, 0.5, 0.8);
+                const engine = new THREE.Mesh(engineGeo, chromeMaterial);
+                engine.position.set(0, 0.5, 0);
+                vehicleGroup.add(engine);
+
+                // Bike Wheels (Thinner front, wider rear)
+                const fWheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.18, 24);
+                fWheelGeo.rotateZ(Math.PI / 2);
+                const rWheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.28, 24);
+                rWheelGeo.rotateZ(Math.PI / 2);
+
+                const frontWheel = new THREE.Mesh(fWheelGeo, tireMaterial);
+                frontWheel.position.set(0, 0.4, 1.2);
+                frontWheel.castShadow = true;
+
+                const rearWheel = new THREE.Mesh(rWheelGeo, tireMaterial);
+                rearWheel.position.set(0, 0.42, -1.1);
+                rearWheel.castShadow = true;
+
+                vehicleGroup.add(frontWheel, rearWheel);
+                vehicleGroup.wheels = [frontWheel, rearWheel];
+
+                // Headlight
+                const hl = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 16), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+                hl.position.set(0, 0.9, 0.75);
+                vehicleGroup.add(hl);
+            }
+
+            // Position Vehicle in Scene
+            vehicleGroup.position.copy(physics.position);
+            vehicleGroup.rotation.y = physics.rotation;
+            scene.add(vehicleGroup);
+            activeVehicleMesh = vehicleGroup;
+
+            // UI Update
+            document.getElementById('hud-vehicle-name').innerText = data.name;
+            document.getElementById('hud-vehicle-class').innerText = `${data.category.replace('-', ' ')} • ${data.type.toUpperCase()}`;
+        }
+
+        /* ----------------------------------------------------
+           7. PHYSICS & DRIVING DYNAMICS ENGINE
+           ---------------------------------------------------- */
+        function updatePhysics(delta) {
+            const topSpeedMs = currentVehicleData.topSpeed / 3.6; // Convert KM/H to M/S
+            const accelRate = 18 / parseFloat(currentVehicleData.accel);
+            const turnSens = (currentVehicleData.handling / 100) * 2.2;
+
+            // Nitro Boost Logic
+            if (keys.nitro && physics.nitro > 0) {
+                physics.isNitroActive = true;
+                physics.nitro = Math.max(0, physics.nitro - delta * 35);
+            } else {
+                physics.isNitroActive = false;
+                physics.nitro = Math.min(100, physics.nitro + delta * 8); // Auto recharge
+            }
+
+            const boostFactor = physics.isNitroActive ? 1.45 : 1.0;
+            const currentMaxSpeed = topSpeedMs * boostFactor;
+
+            // Acceleration & Braking
+            if (keys.forward) {
+                physics.speed += accelRate * boostFactor * delta * 12;
+            } else if (keys.backward) {
+                physics.speed -= accelRate * delta * 15;
+            } else {
+                // Natural Friction/Drag
+                physics.speed *= 0.985;
+            }
+
+            // Clamp Top Speed & Reverse Speed
+            physics.speed = Math.max(-20, Math.min(physics.speed, currentMaxSpeed));
+
+            // Steering Logic
+            const speedFactor = Math.min(1.0, Math.abs(physics.speed) / 10);
+            if (keys.left) {
+                physics.rotation += turnSens * delta * speedFactor * (physics.speed >= 0 ? 1 : -1);
+                physics.bikeLeanAngle = Math.min(0.45, physics.bikeLeanAngle + delta * 2.5);
+            } else if (keys.right) {
+                physics.rotation -= turnSens * delta * speedFactor * (physics.speed >= 0 ? 1 : -1);
+                physics.bikeLeanAngle = Math.max(-0.45, physics.bikeLeanAngle - delta * 2.5);
+            } else {
+                // Center Superbike Lean
+                physics.bikeLeanAngle *= 0.85;
+            }
+
+            // Handbrake / Drift Dynamics
+            if (keys.handbrake) {
+                physics.speed *= 0.96;
+                physics.isDrifting = Math.abs(physics.speed) > 15;
+            } else {
+                physics.isDrifting = false;
+            }
+
+            // Position Updates
+            const vx = Math.sin(physics.rotation) * physics.speed;
+            const vz = Math.cos(physics.rotation) * physics.speed;
+
+            physics.position.x += vx * delta;
+            physics.position.z += vz * delta;
+
+            // Open World Boundary Teleport/Clamp
+            const limit = citySize - 20;
+            if (Math.abs(physics.position.x) > limit) physics.position.x = Math.sign(physics.position.x) * limit;
+            if (Math.abs(physics.position.z) > limit) physics.position.z = Math.sign(physics.position.z) * limit;
+
+            // Sync 3D Mesh Position
+            if (activeVehicleMesh) {
+                activeVehicleMesh.position.copy(physics.position);
+                activeVehicleMesh.rotation.y = physics.rotation;
+
+                // Roll/Lean Effect for Superbikes
+                if (currentVehicleData.type === 'bike') {
+                    activeVehicleMesh.rotation.z = physics.bikeLeanAngle;
+                } else {
+                    activeVehicleMesh.rotation.z = 0;
+                }
+
+                // Animate wheel rotation
+                if (activeVehicleMesh.wheels) {
+                    activeVehicleMesh.wheels.forEach(w => {
+                        w.rotation.x += (physics.speed * delta) / 0.4;
+                    });
+                }
+            }
+
+            // RPM and Audio Sync Calculation
+            const speedKmh = Math.abs(Math.round(physics.speed * 3.6));
+            physics.gear = Math.min(6, Math.floor(speedKmh / 60) + 1);
+            physics.rpm = 1000 + ((speedKmh % 60) / 60) * 7000;
+
+            audioEngine.update(physics.speed, physics.rpm, physics.isNitroActive);
+
+            // Update Camera Position
+            updateCamera();
+
+            // Update Speedometer & Minimap UI
+            updateHUD(speedKmh);
+        }
+
+        /* ----------------------------------------------------
+           8. DYNAMIC CAMERA CONTROLLER
+           ---------------------------------------------------- */
+        function updateCamera() {
+            if (!activeVehicleMesh) return;
+
+            const targetPos = physics.position.clone();
+            
+            if (cameraMode === 0) {
+                // 3rd Person Dynamic Follow
+                const offset = new THREE.Vector3(
+                    -Math.sin(physics.rotation) * 8,
+                    3.2,
+                    -Math.cos(physics.rotation) * 8
+                );
+                camera.position.lerp(targetPos.clone().add(offset), 0.15);
+                camera.lookAt(targetPos.clone().add(new THREE.Vector3(0, 1.2, 0)));
+            } else if (cameraMode === 1) {
+                // Cockpit / Hood View
+                const offset = new THREE.Vector3(
+                    Math.sin(physics.rotation) * 0.4,
+                    1.2,
+                    Math.cos(physics.rotation) * 0.4
+                );
+                camera.position.copy(targetPos.clone().add(offset));
+                const lookAtPos = targetPos.clone().add(new THREE.Vector3(
+                    Math.sin(physics.rotation) * 20,
+                    1.0,
+                    Math.cos(physics.rotation) * 20
+                ));
+                camera.lookAt(lookAtPos);
+            } else {
+                // Far Chase Angle
+                const offset = new THREE.Vector3(
+                    -Math.sin(physics.rotation) * 15,
+                    6.0,
+                    -Math.cos(physics.rotation) * 15
+                );
+                camera.position.lerp(targetPos.clone().add(offset), 0.1);
+                camera.lookAt(targetPos);
+            }
+        }
+
+        /* ----------------------------------------------------
+           9. HUD & MINIMAP RADAR RENDERING
+           ---------------------------------------------------- */
+        const minimapCanvas = document.getElementById('minimap');
+        const miniCtx = minimapCanvas.getContext('2d');
+
+        function updateHUD(speedKmh) {
+            // Speed & Gear Text
+            document.getElementById('hud-speed').innerText = speedKmh;
+            document.getElementById('hud-gear').innerText = `GEAR ${physics.gear}`;
+            
+            // RPM Bar Gauge
+            const rpmPercent = Math.min(100, (physics.rpm / 8000) * 100);
+            document.getElementById('rpm-bar').style.width = `${rpmPercent}%`;
+
+            // Nitro Fill Bar
+            document.getElementById('nitro-fill').style.height = `${physics.nitro}%`;
+
+            // Minimap Radar Render
+            miniCtx.clearRect(0, 0, 130, 130);
+            miniCtx.save();
+            miniCtx.translate(65, 65);
+            miniCtx.rotate(-physics.rotation);
+
+            // Draw City Grid Radar Blips
+            miniCtx.fillStyle = '#334155';
+            for (let x = -300; x <= 300; x += 100) {
+                for (let z = -300; z <= 300; z += 100) {
+                    const dx = (x - physics.position.x) * 0.15;
+                    const dz = (z - physics.position.z) * 0.15;
+                    if (Math.abs(dx) < 55 && Math.abs(dz) < 55) {
+                        miniCtx.fillRect(dx - 2, dz - 2, 4, 4);
+                    }
+                }
+            }
+
+            miniCtx.restore();
+        }
+
+        function showNotification(msg) {
+            const box = document.getElementById('notification-box');
+            box.innerText = msg;
+            box.classList.remove('opacity-0', 'translate-y-2');
+            box.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                box.classList.remove('opacity-100', 'translate-y-0');
+                box.classList.add('opacity-0', 'translate-y-2');
+            }, 2500);
+        }
+
+        /* ----------------------------------------------------
+           10. GARAGE SYSTEM UI BUILDER
+           ---------------------------------------------------- */
+        function renderGarageGrid(filterCat = 'all') {
+            const grid = document.getElementById('vehicle-grid');
+            grid.innerHTML = '';
+
+            const items = VEHICLE_DATABASE.filter(item => filterCat === 'all' || item.category === filterCat);
+
+            items.forEach(v => {
+                const card = document.createElement('div');
+                card.className = `glass-panel p-4 rounded-2xl border transition duration-200 cursor-pointer flex flex-col justify-between hover:scale-[1.02] ${v.id === currentVehicleData.id ? 'border-cyan-400 bg-cyan-950/30' : 'border-white/10 hover:border-blue-500/50'}`;
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-bold uppercase px-2 py-0.5 rounded ${v.type === 'car' ? 'bg-blue-600/30 text-blue-300 border border-blue-500/30' : 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/30'}">
+                                ${v.type.toUpperCase()}
+                            </span>
+                            <div class="w-4 h-4 rounded-full border border-white/30" style="background-color: ${v.color}"></div>
+                        </div>
+                        <h3 class="font-extrabold text-base text-white truncate">${v.name}</h3>
+                        <p class="text-xs text-gray-400 capitalize mb-3">${v.category.replace('-', ' ')}</p>
+                    </div>
+
+                    <div class="space-y-1.5 text-xs mb-4">
+                        <div class="flex justify-between text-gray-300">
+                            <span>Top Speed:</span>
+                            <span class="font-bold text-cyan-400">${v.topSpeed} KM/H</span>
+                        </div>
+                        <div class="flex justify-between text-gray-300">
+                            <span>0-100 km/h:</span>
+                            <span class="font-bold text-white">${v.accel}s</span>
+                        </div>
+                        <div class="flex justify-between text-gray-300">
+                            <span>Handling:</span>
+                            <span class="font-bold text-white">${v.handling}/100</span>
+                        </div>
+                    </div>
+
+                    <button class="w-full py-2 rounded-xl font-bold text-xs ${v.id === currentVehicleData.id ? 'bg-cyan-500 text-black' : 'bg-blue-600 hover:bg-blue-500 text-white'} transition">
+                        ${v.id === currentVehicleData.id ? 'DRIVING NOW' : 'SELECT VEHICLE'}
+                    </button>
+                `;
+
+                card.onclick = () => {
+                    currentVehicleData = v;
+                    spawnVehicle(v);
+                    renderGarageGrid(filterCat);
+                    showNotification(`Selected ${v.name}!`);
+                };
+
+                grid.appendChild(card);
+            });
+        }
+
+        /* ----------------------------------------------------
+           11. INPUT CONTROLLER & EVENT LISTENERS
+           ---------------------------------------------------- */
+        function setupEventListeners() {
+            // Keyboard Controls
+            window.addEventListener('keydown', (e) => {
+                audioEngine.init(); // Activate Web Audio on keypress
+                switch(e.code) {
+                    case 'KeyW': case 'ArrowUp': keys.forward = true; break;
+                    case 'KeyS': case 'ArrowDown': keys.backward = true; break;
+                    case 'KeyA': case 'ArrowLeft': keys.left = true; break;
+                    case 'KeyD': case 'ArrowRight': keys.right = true; break;
+                    case 'Space': keys.handbrake = true; break;
+                    case 'ShiftLeft': case 'ShiftRight': keys.nitro = true; break;
+                    case 'KeyC': toggleCamera(); break;
+                    case 'KeyM': toggleGarageModal(); break;
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                switch(e.code) {
+                    case 'KeyW': case 'ArrowUp': keys.forward = false; break;
+                    case 'KeyS': case 'ArrowDown': keys.backward = false; break;
+                    case 'KeyA': case 'ArrowLeft': keys.left = false; break;
+                    case 'KeyD': case 'ArrowRight': keys.right = false; break;
+                    case 'Space': keys.handbrake = false; break;
+                    case 'ShiftLeft': case 'ShiftRight': keys.nitro = false; break;
+                }
+            });
+
+            // Mobile Touch Controls
+            setupTouchBtn('touch-left', (pressed) => keys.left = pressed);
+            setupTouchBtn('touch-right', (pressed) => keys.right = pressed);
+            setupTouchBtn('touch-gas', (pressed) => keys.forward = pressed);
+            setupTouchBtn('touch-brake', (pressed) => keys.backward = pressed);
+            setupTouchBtn('touch-nitro', (pressed) => keys.nitro = pressed);
+
+            // UI Buttons
+            document.getElementById('btn-garage').onclick = toggleGarageModal;
+            document.getElementById('close-garage').onclick = toggleGarageModal;
+            document.getElementById('btn-camera').onclick = toggleCamera;
+            
+            document.getElementById('btn-settings').onclick = () => {
+                document.getElementById('settings-modal').classList.remove('hidden');
+            };
+            document.getElementById('close-settings').onclick = () => {
+                document.getElementById('settings-modal').classList.add('hidden');
+            };
+
+            // Garage Category Filter Tabs
+            document.querySelectorAll('.cat-filter').forEach(btn => {
+                btn.onclick = (e) => {
+                    document.querySelectorAll('.cat-filter').forEach(b => {
+                        b.classList.remove('bg-blue-600', 'text-white');
+                        b.classList.add('glass-panel', 'text-gray-300');
+                    });
+                    e.target.classList.add('bg-blue-600', 'text-white');
+                    e.target.classList.remove('glass-panel', 'text-gray-300');
+                    renderGarageGrid(e.target.dataset.cat);
+                };
+            });
+        }
+
+        function setupTouchBtn(id, callback) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); audioEngine.init(); callback(true); });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); callback(false); });
+        }
+
+        function toggleCamera() {
+            cameraMode = (cameraMode + 1) % 3;
+            const names = ["3rd Person Follow", "Cockpit / Hood View", "Far Chase View"];
+            showNotification(`Camera: ${names[cameraMode]}`);
+        }
+
+        function toggleGarageModal() {
+            const modal = document.getElementById('garage-modal');
+            modal.classList.toggle('hidden');
+            if (!modal.classList.contains('hidden')) {
+                renderGarageGrid();
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /* ----------------------------------------------------
+           12. MAIN GAME LOOP
+           ---------------------------------------------------- */
+        let clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = Math.min(clock.getDelta(), 0.1); // Clamp frame delta
+
+            // Update Vehicle Driving Physics
+            updatePhysics(delta);
+
+            // Render 3D Scene
+            renderer.render(scene, camera);
+        }
+
+        // Initialize App on Window Load
+        window.onload = function() {
+            initScene();
+            setupEventListeners();
+            animate();
+            
+            setTimeout(() => {
+                showNotification("Press 'M' or tap Garage to pick from 100 Supercars & Superbikes!");
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
